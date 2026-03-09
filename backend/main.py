@@ -63,6 +63,7 @@ def _db_init() -> None:
               keyword TEXT PRIMARY KEY,
               count INTEGER NOT NULL DEFAULT 0,
               category TEXT,
+              subcategory TEXT,
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
@@ -75,6 +76,8 @@ def _db_init() -> None:
         }
         if "category" not in cols:
             conn.execute("ALTER TABLE keywords ADD COLUMN category TEXT")
+        if "subcategory" not in cols:
+            conn.execute("ALTER TABLE keywords ADD COLUMN subcategory TEXT")
 
         conn.execute(
             """
@@ -101,6 +104,92 @@ def _db_init() -> None:
         conn.close()
 
 
+def _dedupe_keywords() -> None:
+    conn = _db_connect()
+    try:
+        rows = conn.execute("SELECT keyword, count, category, subcategory FROM keywords").fetchall()
+        mapping: dict[str, str] = {}
+        merges: list[tuple[str, str]] = []
+
+        for r in rows:
+            orig = r["keyword"]
+            nk = _normalize_keyword(orig)
+            if not nk:
+                continue
+
+            if nk in mapping:
+                merges.append((orig, mapping[nk]))
+                continue
+
+            if nk != orig:
+                mapping[nk] = nk
+                merges.append((orig, nk))
+            else:
+                mapping[nk] = orig
+
+        if not merges:
+            return
+
+        for orig, target in merges:
+            if orig == target:
+                continue
+
+            src = conn.execute(
+                "SELECT count, category, subcategory FROM keywords WHERE keyword = ?",
+                (orig,),
+            ).fetchone()
+            if src is None:
+                continue
+
+            src_count = int(src["count"] or 0)
+            src_cat = src["category"]
+            src_sub = src["subcategory"]
+
+            conn.execute(
+                "INSERT OR IGNORE INTO keywords(keyword, count, category, subcategory, created_at, updated_at) VALUES(?, 0, NULL, NULL, datetime('now'), datetime('now'))",
+                (target,),
+            )
+
+            tgt = conn.execute(
+                "SELECT count, category, subcategory FROM keywords WHERE keyword = ?",
+                (target,),
+            ).fetchone()
+            tgt_cat = tgt["category"] if tgt is not None else None
+            tgt_sub = tgt["subcategory"] if tgt is not None else None
+
+            if (tgt_cat is None or str(tgt_cat).strip() == "") and isinstance(src_cat, str) and src_cat.strip():
+                conn.execute(
+                    "UPDATE keywords SET category = ?, updated_at = datetime('now') WHERE keyword = ?",
+                    (src_cat, target),
+                )
+
+            if (tgt_sub is None or str(tgt_sub).strip() == "") and isinstance(src_sub, str) and src_sub.strip():
+                conn.execute(
+                    "UPDATE keywords SET subcategory = ?, updated_at = datetime('now') WHERE keyword = ?",
+                    (src_sub, target),
+                )
+
+            if src_count:
+                conn.execute(
+                    "UPDATE keywords SET count = count + ?, updated_at = datetime('now') WHERE keyword = ?",
+                    (src_count, target),
+                )
+
+            conn.execute(
+                "INSERT OR IGNORE INTO generation_keywords(generation_id, keyword) SELECT generation_id, ? FROM generation_keywords WHERE keyword = ?",
+                (target, orig),
+            )
+            conn.execute("DELETE FROM generation_keywords WHERE keyword = ?", (orig,))
+            conn.execute("DELETE FROM keywords WHERE keyword = ?", (orig,))
+
+        conn.execute(
+            "DELETE FROM generations WHERE id NOT IN (SELECT DISTINCT generation_id FROM generation_keywords)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _normalize_keyword(s: str) -> str | None:
     s = (s or "").strip().lower()
     if not s:
@@ -112,6 +201,13 @@ def _normalize_keyword(s: str) -> str | None:
 def _normalize_category(s: str | None) -> str:
     c = (s or "").strip().lower()
     return c if c in ALLOWED_CATEGORIES else "other"
+
+
+def _normalize_subcategory(s: str | None) -> str | None:
+    if s is None:
+        return None
+    ns = _normalize_keyword(str(s))
+    return ns
 
 
 def _record_keywords(keywords: list[str]) -> int | None:
@@ -163,6 +259,7 @@ def _record_keywords(keywords: list[str]) -> int | None:
 @app.on_event("startup")
 def startup() -> None:
     _db_init()
+    _dedupe_keywords()
 
 
 @app.get("/")
@@ -406,23 +503,23 @@ def list_keywords(limit: int = 200, q: str | None = None, category: str | None =
         if q and cat:
             qn = f"%{_normalize_keyword(q) or ''}%"
             rows = conn.execute(
-                "SELECT keyword, count, category FROM keywords WHERE category = ? AND keyword LIKE ? ORDER BY count DESC, keyword ASC LIMIT ?",
+                "SELECT keyword, count, category, subcategory FROM keywords WHERE category = ? AND keyword LIKE ? ORDER BY count DESC, keyword ASC LIMIT ?",
                 (cat, qn, limit),
             ).fetchall()
         elif q:
             qn = f"%{_normalize_keyword(q) or ''}%"
             rows = conn.execute(
-                "SELECT keyword, count, category FROM keywords WHERE keyword LIKE ? ORDER BY count DESC, keyword ASC LIMIT ?",
+                "SELECT keyword, count, category, subcategory FROM keywords WHERE keyword LIKE ? ORDER BY count DESC, keyword ASC LIMIT ?",
                 (qn, limit),
             ).fetchall()
         elif cat:
             rows = conn.execute(
-                "SELECT keyword, count, category FROM keywords WHERE category = ? ORDER BY count DESC, keyword ASC LIMIT ?",
+                "SELECT keyword, count, category, subcategory FROM keywords WHERE category = ? ORDER BY count DESC, keyword ASC LIMIT ?",
                 (cat, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT keyword, count, category FROM keywords ORDER BY count DESC, keyword ASC LIMIT ?",
+                "SELECT keyword, count, category, subcategory FROM keywords ORDER BY count DESC, keyword ASC LIMIT ?",
                 (limit,),
             ).fetchall()
 
@@ -432,6 +529,7 @@ def list_keywords(limit: int = 200, q: str | None = None, category: str | None =
                     "keyword": r["keyword"],
                     "count": r["count"],
                     "category": r["category"] or None,
+                    "subcategory": r["subcategory"] or None,
                 }
                 for r in rows
             ],
@@ -449,6 +547,7 @@ def categories() -> dict[str, Any]:
 def set_keyword_category(payload: dict[str, Any]) -> dict[str, Any]:
     kw = payload.get("keyword")
     cat = payload.get("category")
+    sub = payload.get("subcategory")
     if not isinstance(kw, str):
         raise HTTPException(status_code=400, detail="keyword is required")
     nk = _normalize_keyword(kw)
@@ -457,18 +556,54 @@ def set_keyword_category(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(cat, str):
         raise HTTPException(status_code=400, detail="category is required")
     nc = _normalize_category(cat)
+    ns = _normalize_subcategory(sub)
 
     conn = _db_connect()
     try:
         conn.execute(
-            "UPDATE keywords SET category = ?, updated_at = datetime('now') WHERE keyword = ?",
-            (nc, nk),
+            "UPDATE keywords SET category = ?, subcategory = ?, updated_at = datetime('now') WHERE keyword = ?",
+            (nc, ns, nk),
         )
         conn.commit()
     finally:
         conn.close()
 
-    return {"keyword": nk, "category": nc}
+    return {"keyword": nk, "category": nc, "subcategory": ns}
+
+
+@app.post("/api/add_keyword")
+def add_keyword(payload: dict[str, Any]) -> dict[str, Any]:
+    kw = payload.get("keyword")
+    cat = payload.get("category")
+    sub = payload.get("subcategory")
+    if not isinstance(kw, str):
+        raise HTTPException(status_code=400, detail="keyword is required")
+    nk = _normalize_keyword(kw)
+    if not nk:
+        raise HTTPException(status_code=400, detail="keyword is required")
+
+    nc = _normalize_category(cat if isinstance(cat, str) else None)
+    ns = _normalize_subcategory(sub)
+
+    conn = _db_connect()
+    try:
+        conn.execute(
+            """
+            INSERT INTO keywords(keyword, count, category, subcategory, created_at, updated_at)
+            VALUES(?, 1, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(keyword) DO UPDATE SET
+              count = count + 1,
+              category = COALESCE(NULLIF(keywords.category, ''), excluded.category),
+              subcategory = COALESCE(NULLIF(keywords.subcategory, ''), excluded.subcategory),
+              updated_at = datetime('now')
+            """,
+            (nk, nc, ns),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"keyword": nk, "category": nc, "subcategory": ns}
 
 
 @app.post("/api/delete_keyword")

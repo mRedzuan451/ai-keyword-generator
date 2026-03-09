@@ -113,6 +113,16 @@ select {
   outline: none;
 }
 
+select option {
+  background: #0b1220;
+  color: var(--text);
+}
+
+select option:checked {
+  background: #1a2a55;
+  color: var(--text);
+}
+
 .kwList {
   margin-top: 10px;
   max-height: 420px;
@@ -134,6 +144,73 @@ select {
 
 .kwItem:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.kwGroup {
+  border-radius: 12px;
+  border: 1px solid rgba(232, 238, 252, 0.10);
+  background: rgba(0,0,0,0.10);
+  margin-bottom: 8px;
+}
+
+.kwGroupSummary {
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: var(--text);
+  font-weight: 700;
+  list-style: none;
+}
+
+.kwGroupSummary::-webkit-details-marker {
+  display: none;
+}
+
+.kwGroupSummary:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.kwGroupList {
+  padding: 6px 6px 8px 18px;
+}
+
+.kwSubGroup {
+  border-radius: 12px;
+  border: 1px solid rgba(232, 238, 252, 0.10);
+  background: rgba(0,0,0,0.08);
+  margin: 6px 0;
+}
+
+.kwSubGroupSummary {
+  cursor: pointer;
+  padding: 7px 10px;
+  border-radius: 12px;
+  color: rgba(232, 238, 252, 0.92);
+  font-weight: 650;
+  font-size: 12.5px;
+  list-style: none;
+}
+
+.kwSubGroupSummary::-webkit-details-marker {
+  display: none;
+}
+
+.kwSubGroupSummary:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.kwSubGroupList {
+  padding: 6px 6px 8px 14px;
+}
+
+.miniInput {
+  padding: 6px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  outline: none;
+  font-size: 12px;
 }
 
 .kwLeft {
