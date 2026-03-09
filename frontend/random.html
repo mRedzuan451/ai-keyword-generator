@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Random Prompt Builder</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="topbar">
+        <div>
+          <h1>Random Prompt Builder</h1>
+          <p class="sub">Uses keywords saved from your previous generations.</p>
+        </div>
+        <div class="topbarActions">
+          <a class="linkBtn" href="/">Back</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field">
+            <div class="label">How many keywords</div>
+            <input id="count" type="number" min="1" max="80" value="20" />
+          </label>
+          <button id="generate">Generate random prompt</button>
+          <button id="copy" class="mini" disabled>Copy</button>
+        </div>
+
+        <div class="grid" style="margin-top: 12px; grid-template-columns: 1fr 1fr;">
+          <div>
+            <div class="section">
+              <div class="sectionHeader">
+                <div class="label">Required keywords</div>
+                <button id="clearRequired" class="mini" disabled>Clear</button>
+              </div>
+
+              <label class="field" style="margin-top: 0;">
+                <div class="label">Search</div>
+                <input id="search" type="text" placeholder="type to filter..." />
+              </label>
+
+              <label class="field" style="margin-top: 10px;">
+                <div class="label">Category</div>
+                <select id="category"></select>
+              </label>
+
+              <div id="requiredList" class="kwList" aria-label="keyword list"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="row" style="margin-top: 8px;">
+              <div class="pill">Unique keywords: <span id="unique">-</span></div>
+              <div class="pill">Total records: <span id="total">-</span></div>
+            </div>
+
+            <div class="section" style="margin-top: 12px;">
+              <div class="sectionHeader">
+                <div class="label">Prompt</div>
+                <button id="copyPrompt" class="mini" disabled>Copy</button>
+              </div>
+              <pre id="prompt" class="result"></pre>
+            </div>
+
+            <div class="section">
+              <div class="sectionHeader">
+                <div class="label">Keywords</div>
+                <button id="copyKeywords" class="mini" disabled>Copy</button>
+              </div>
+              <pre id="keywords" class="result small"></pre>
+            </div>
+          </div>
+        </div>
+
+        <div id="error" class="error" hidden></div>
+      </div>
+
+      <div class="footer">
+        API: <code>/api/random_prompt</code>, <code>/api/stats</code>
+      </div>
+    </div>
+
+    <script src="/static/random.js"></script>
+  </body>
+</html>

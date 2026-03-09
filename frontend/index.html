@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Keyword Generator</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Image Keyword Generator</h1>
+      <p class="sub">Upload an image. The local Qwen model will generate keywords + a prompt you can reuse in image generation tools.</p>
+
+      <div class="row" style="margin-top: 0; margin-bottom: 12px;">
+        <a class="linkBtn" href="/random">Random Prompt Builder</a>
+      </div>
+
+      <div class="card">
+        <label class="file">
+          <input id="image" type="file" accept="image/*" />
+          <span>Select image</span>
+        </label>
+
+        <div class="label" style="margin-top: 10px;">Tip: you can paste an image here with <code>Ctrl+V</code>.</div>
+
+        <div class="row">
+          <button id="generate" disabled>Generate</button>
+        </div>
+
+        <div id="loading" class="loading" hidden>
+          <div class="spinner" aria-hidden="true"></div>
+          <div>
+            <div class="loadingTitle">Generating keywords…</div>
+            <div id="loadingStatus" class="loadingStatus">Uploading image</div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <div class="label">Preview</div>
+            <img id="preview" alt="preview" />
+          </div>
+          <div>
+            <div class="section">
+              <div class="sectionHeader">
+                <div class="label">Keywords</div>
+                <button id="copyKeywords" class="mini" disabled>Copy</button>
+              </div>
+              <pre id="keywords" class="result"></pre>
+            </div>
+
+            <div class="section">
+              <div class="sectionHeader">
+                <div class="label">Prompt</div>
+                <button id="copyPrompt" class="mini" disabled>Copy</button>
+              </div>
+              <pre id="prompt" class="result small"></pre>
+            </div>
+
+            <div class="section">
+              <div class="sectionHeader">
+                <div class="label">Negative prompt</div>
+                <button id="copyNegative" class="mini" disabled>Copy</button>
+              </div>
+              <pre id="negative" class="result small"></pre>
+            </div>
+          </div>
+        </div>
+
+        <div id="error" class="error" hidden></div>
+      </div>
+
+      <div class="footer">
+        Backend: <code>/api/generate</code> (Ollama <code>/api/chat</code>)
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
