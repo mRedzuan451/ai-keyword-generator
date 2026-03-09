@@ -453,7 +453,7 @@ async function generate() {
     const res = await fetch('/api/build_prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ n, coherent: true, required }),
+      body: JSON.stringify({ n, coherent: false, required }),
     });
     if (!res.ok) {
       const text = await res.text();

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import random
 import re
 import sqlite3
 from typing import Any
@@ -817,8 +818,11 @@ def build_prompt(payload: dict[str, Any]) -> dict[str, Any]:
     final_keywords = required + [k for k in extra if k not in seen]
     final_keywords = final_keywords[:n]
 
+    shuffled = list(final_keywords)
+    random.shuffle(shuffled)
+
     return {
         "required": required,
-        "keywords": final_keywords,
-        "prompt": ", ".join(final_keywords),
+        "keywords": shuffled,
+        "prompt": ", ".join(shuffled),
     }
