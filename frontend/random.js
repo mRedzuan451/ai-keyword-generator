@@ -23,6 +23,47 @@ let categories = ['all'];
 
 const TREE_STATE_KEY = 'kwTreeStateV1';
 
+let sessionId = null;
+let pingTimer = null;
+
+async function sessionStart() {
+  try {
+    const res = await fetch('/api/session_start', { method: 'POST' });
+    if (!res.ok) return;
+    const data = await res.json();
+    sessionId = typeof data?.session_id === 'string' ? data.session_id : null;
+    if (!sessionId) return;
+
+    pingTimer = window.setInterval(() => {
+      fetch('/api/session_ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      }).catch(() => {});
+    }, 8000);
+  } catch {
+    // ignore
+  }
+}
+
+function sessionEnd() {
+  try {
+    if (!sessionId) return;
+    const payload = JSON.stringify({ session_id: sessionId });
+    navigator.sendBeacon(
+      '/api/session_end',
+      new Blob([payload], { type: 'application/json' })
+    );
+  } catch {
+    // ignore
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  if (pingTimer) window.clearInterval(pingTimer);
+  sessionEnd();
+});
+
 function loadTreeState() {
   try {
     const raw = localStorage.getItem(TREE_STATE_KEY);
@@ -539,6 +580,8 @@ addKeywordEl?.addEventListener('keydown', (e) => {
 addCategoryEl?.addEventListener('change', () => {
   fillSubcategorySelect(addSubcategoryEl, addCategoryEl?.value || 'other', '');
 });
+
+sessionStart();
 
 loadStats();
 loadCategories();

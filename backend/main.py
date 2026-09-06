@@ -6,6 +6,9 @@ import os
 import random
 import re
 import sqlite3
+import threading
+import time
+import uuid
 from typing import Any
 
 import httpx
@@ -18,6 +21,9 @@ from fastapi.staticfiles import StaticFiles
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
 DB_PATH = os.getenv("DB_PATH", os.path.abspath(os.path.join(os.path.dirname(__file__), "keywords.sqlite3")))
+AUTO_SHUTDOWN = os.getenv("AUTO_SHUTDOWN", "0") in {"1", "true", "yes", "on"}
+AUTO_SHUTDOWN_GRACE_SECONDS = int(os.getenv("AUTO_SHUTDOWN_GRACE_SECONDS", "15"))
+AUTO_SHUTDOWN_STALE_SECONDS = int(os.getenv("AUTO_SHUTDOWN_STALE_SECONDS", "20"))
 
 ALLOWED_CATEGORIES = [
     "subject",
@@ -35,6 +41,10 @@ ALLOWED_CATEGORIES = [
 ]
 
 app = FastAPI(title="Image Keyword Generator")
+
+_session_lock = threading.Lock()
+_sessions_last_seen: dict[str, float] = {}
+_shutdown_started = False
 
 app.add_middleware(
     CORSMiddleware,
@@ -261,6 +271,66 @@ def _record_keywords(keywords: list[str]) -> int | None:
 def startup() -> None:
     _db_init()
     _dedupe_keywords()
+    if AUTO_SHUTDOWN:
+        _start_shutdown_monitor()
+
+
+def _start_shutdown_monitor() -> None:
+    global _shutdown_started
+    if _shutdown_started:
+        return
+    _shutdown_started = True
+
+    def run() -> None:
+        while True:
+            time.sleep(2.0)
+            now = time.time()
+            with _session_lock:
+                stale = [sid for sid, ts in _sessions_last_seen.items() if (now - ts) > AUTO_SHUTDOWN_STALE_SECONDS]
+                for sid in stale:
+                    _sessions_last_seen.pop(sid, None)
+
+                if _sessions_last_seen:
+                    continue
+
+            time.sleep(float(AUTO_SHUTDOWN_GRACE_SECONDS))
+            now2 = time.time()
+            with _session_lock:
+                if any((now2 - ts) <= AUTO_SHUTDOWN_STALE_SECONDS for ts in _sessions_last_seen.values()):
+                    continue
+            os._exit(0)
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+
+
+@app.post("/api/session_start")
+def session_start() -> dict[str, Any]:
+    sid = uuid.uuid4().hex
+    with _session_lock:
+        _sessions_last_seen[sid] = time.time()
+    return {"session_id": sid}
+
+
+@app.post("/api/session_ping")
+def session_ping(payload: dict[str, Any]) -> dict[str, Any]:
+    sid = payload.get("session_id")
+    if not isinstance(sid, str) or not sid:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    with _session_lock:
+        if sid in _sessions_last_seen:
+            _sessions_last_seen[sid] = time.time()
+    return {"ok": True}
+
+
+@app.post("/api/session_end")
+def session_end(payload: dict[str, Any]) -> dict[str, Any]:
+    sid = payload.get("session_id")
+    if not isinstance(sid, str) or not sid:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    with _session_lock:
+        _sessions_last_seen.pop(sid, None)
+    return {"ok": True}
 
 
 @app.get("/")
